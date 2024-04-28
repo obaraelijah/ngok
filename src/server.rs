@@ -1,8 +1,8 @@
 mod packet;
 use bytes::BytesMut;
 use clap::Parser;
-use tokio::net::TcpStream;
 use tokio::io::AsyncReadExt;
+use tokio::net::TcpStream;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -13,9 +13,8 @@ struct Config {
     domains: Vec<String>,
 }
 
-
 #[tokio::main]
-async fn main() -> std::io::Result<()>{
+async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt::init();
 
     let config = Config::parse();
@@ -30,10 +29,7 @@ async fn main() -> std::io::Result<()>{
     Ok(())
 }
 
-
-fn handle_connection(
-    mut conn: TcpStream
-) -> std::io::Result<()> {
+fn handle_connection(mut conn: TcpStream) -> std::io::Result<()> {
     let mut buffer = BytesMut::with_capacity(4096);
     let bytes_len = conn.read_buf(&mut buffer);
     let packet = packet::Packet::parse(&buffer);
