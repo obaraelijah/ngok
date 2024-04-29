@@ -1,8 +1,10 @@
 use bytes::{Buf, BytesMut};
 use clap::Parser;
 use std::error::Error;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 mod packet;
@@ -65,6 +67,7 @@ async fn init(config: &Config) -> Result<String, Box<dyn Error + Send + Sync>> {
             if let Err(err) = res {
                 tracing::error!("control channel is closed by remote peer {}", err);
                 break;
+                let mut logger_dest = unimplemented!();
             }
 
             tokio::time::sleep(Duration::from_millis(500)).await;
@@ -75,9 +78,11 @@ async fn init(config: &Config) -> Result<String, Box<dyn Error + Send + Sync>> {
 
 async fn run_data_channel(config: &Config, domain: String) -> std::io::Result<()> {
     loop {
-        let mut conn = TcpStream::connect(format!("{}:{}", config.domain_name, config.server_port)).await?;
+        let mut conn =
+            TcpStream::connect(format!("{}:{}", config.domain_name, config.server_port)).await?;
         tracing::trace!("established data channel");
-        conn.write_all(&bincode::serialize(&packet::Packet::DataInit(domain.clone())).unwrap()).await?;
+        conn.write_all(&bincode::serialize(&packet::Packet::DataInit(domain.clone())).unwrap())
+            .await?;
 
         let packet = bincode::serialize(&packet::Packet::DataForward).unwrap();
         let mut buf = vec![0u8; packet.len()];
@@ -92,8 +97,16 @@ async fn run_data_channel(config: &Config, domain: String) -> std::io::Result<()
             let local = TcpStream::connect(format!("0.0.0.0:{}", config.target_port)).await?;
             tracing::trace!("copy bidirectional data: conn, local");
 
-            let mut logger_src = unimplemented!();
-            let mut logger_dest = unimplemented!();
+            let state = Arc::new(Mutex::new(LoggerState::new()));
+            let mut logger_src = Logger {
+                inner: Box::pin(conn),
+                state: state.clone(),
+            };
+
+            let mut logger_dest = Logger {
+                inner: Box::pin(local),
+                state: state.clone(),
+            };
 
             let _ = tokio::io::copy_bidirectional(&mut logger_src, &mut logger_dest);
         }
@@ -104,8 +117,22 @@ struct LoggerState {
     timestamp: Option<Instant>,
 }
 
+struct Logger<T: AsyncRead + AsyncWrite> {
+    // why do we need to box T? deref?
+    inner: Pin<Box<T>>,
+    state: Arc<Mutex<LoggerState>>,
+}
+
 impl LoggerState {
     fn new() -> Self {
         Self { timestamp: None }
     }
+}
+
+impl<T: AsyncRead + AsyncWrite> AsyncRead for Logger<T> {
+    unimplemented!();
+}
+
+impl<T: AsyncWrite + AsyncRead> AsyncWrite for Logger<T> {
+    unimplemented!();
 }
