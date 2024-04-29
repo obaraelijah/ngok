@@ -1,7 +1,7 @@
 use bytes::{Buf, BytesMut};
 use clap::Parser;
 use std::error::Error;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Err(e) = run_data_channel(&config, domain).await {
         tracing::error!("{:?}", e);
     }
-    
+
     Ok(())
 }
 
@@ -74,5 +74,38 @@ async fn init(config: &Config) -> Result<String, Box<dyn Error + Send + Sync>> {
 }
 
 async fn run_data_channel(config: &Config, domain: String) -> std::io::Result<()> {
-    unimplemented!()
+    loop {
+        let mut conn = TcpStream::connect(format!("{}:{}", config.domain_name, config.server_port)).await?;
+        tracing::trace!("established data channel");
+        conn.write_all(&bincode::serialize(&packet::Packet::DataInit(domain.clone())).unwrap()).await?;
+
+        let packet = bincode::serialize(&packet::Packet::DataForward).unwrap();
+        let mut buf = vec![0u8; packet.len()];
+        conn.read_buf(&mut buf).await?;
+
+        // Two implementations:
+        // 2 -- > reimplement copy_bidirectional with an event channel that backdoors
+        //          A --------> B           send(Event::AtoB).await.expect("channel closed!");
+        //          B --------> A           j
+
+        if let packet::Packet::DataForward = packet::Packet::parse(&buf) {
+            let local = TcpStream::connect(format!("0.0.0.0:{}", config.target_port)).await?;
+            tracing::trace!("copy bidirectional data: conn, local");
+
+            let mut logger_src = unimplemented!();
+            let mut logger_dest = unimplemented!();
+
+            let _ = tokio::io::copy_bidirectional(&mut logger_src, &mut logger_dest);
+        }
+    }
+}
+
+struct LoggerState {
+    timestamp: Option<Instant>,
+}
+
+impl LoggerState {
+    fn new() -> Self {
+        Self { timestamp: None }
+    }
 }
