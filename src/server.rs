@@ -127,6 +127,7 @@ impl ControlChannel {
         domains: Arc<Mutex<Vec<DomainPort>>>,
     ) -> Self {
         let (tx, mut rx): (_, mpsc::Receiver<TcpStream>) = mpsc::channel(32);
+        let (visitor_tx, mut visitor_rx) = mpsc::channel(32);
         let (close_tx, mut close_rx) = tokio::sync::oneshot::channel();
 
         // Push domain back to domain pools when a client connection is closed.
@@ -149,6 +150,31 @@ impl ControlChannel {
                 }
             }
         });
+
+        // Spawn a TCP socket to listen to the public internet traffic
+        // at the assigned port of the domain.
+        //
+        // Without this, our server can't be receiving any requests from
+        // the specified domain.
+        let port = domain_port.1;
+        tokio::spawn(async move {
+            let listener = TcpListener::bind((DEFAULT_IP, port)).await.unwrap();
+            tracing::info!("Listening to {DEFAULT_IP}:{}", port);
+
+            loop {
+                tokio::select! {
+                    Ok(port_recv) = &mut close_rx => {
+                        tracing::warn!("{port}: receive closed for port: {port_recv}");
+                        break;
+                    },
+                    Ok((incoming, _addr)) = listener.accept() => {
+                        let _ = visitor_tx.send(incoming).await;
+                    }
+
+                }
+            }
+        });
+
         ControlChannel { data_tx: tx }
     }
 }
