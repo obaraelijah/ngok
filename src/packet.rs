@@ -6,6 +6,7 @@ pub enum Packet {
     Init,
     Success(String),
     DataInit(String),
+    DataForward,
 }
 
 impl Packet {

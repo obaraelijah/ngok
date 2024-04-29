@@ -175,6 +175,31 @@ impl ControlChannel {
             }
         });
 
+        // Listen for incoming requests that is forward to the visitor_rx channel
+        // by the TCP server above.
+        //
+        // If a request is received, listen to the data connection. There should
+        // always have at least one connection at the time being as our client code
+        // always create a Data Channel once the previous request is completed.
+        //
+        // If both are found, begin proxying request and response on both side.
+        tokio::spawn(async move {
+            loop {
+                if let Some(mut incoming) = visitor_rx.recv().await {
+                    tracing::info!("Accept incoming from visitor_rx");
+                    if let Some(mut conn) = rx.recv().await {
+                        let packet = bincode::serialize(&packet::Packet::DataForward).unwrap();
+                        if conn.write_all(&packet).await.is_ok() {
+                            tracing::trace!("copy bidirectional data: incoming, conn");
+                            let result =
+                                tokio::io::copy_bidirectional(&mut incoming, &mut conn).await;
+                            tracing::trace!("result: {result:?}");
+                        }
+                    }
+                }
+            }
+        });
+
         ControlChannel { data_tx: tx }
     }
 }
