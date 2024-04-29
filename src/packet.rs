@@ -5,6 +5,7 @@ pub enum Packet {
     Ack,
     Init,
     Success(String),
+    CreateData,
     DataInit(String),
     DataForward,
 }
