@@ -1,17 +1,13 @@
-mod packet;
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use clap::Parser;
-use tokio::io::AsyncReadExt;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 
-const DEFAULT_IP: &str = "0.0.0.0";
+mod packet;
 
-type State = Arc<RwLock<HashMap<String, ControlChannel>>>;
-type DomainPort = (String, u16);
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Config {
@@ -20,6 +16,11 @@ struct Config {
     #[clap(short, long, value_parser)]
     domains: Vec<String>,
 }
+
+const DEFAULT_IP: &str = "0.0.0.0";
+
+type State = Arc<RwLock<HashMap<String, ControlChannel>>>;
+type DomainPort = (String, u16);
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -69,20 +70,53 @@ async fn handle_connection(
     state: State,
 ) -> std::io::Result<()> {
     let mut buffer = BytesMut::with_capacity(4096);
-    let bytes_len = conn.read_buf(&mut buffer);
+
+    let bytes_len = conn.read_buf(&mut buffer).await?;
     let packet = packet::Packet::parse(&buffer);
     match packet {
         packet::Packet::Init => {
-            unimplemented!()
+            let mut domains_guard = domains.lock().await;
+            let domain_port = domains_guard.pop();
+            drop(domains_guard);
+
+            if domain_port.is_none() {
+                tracing::warn!("oops no more domain available, ignore you");
+                return Ok(());
+            }
+
+            let domain_port = domain_port.unwrap();
+            let domain = domain_port.0.clone();
+            let success = packet::Packet::Success(domain.clone());
+            conn.write_all(&bincode::serialize(&success).unwrap())
+                .await?;
+            tracing::trace!("sent success msg");
+
+            buffer.advance(bytes_len);
+            conn.read_buf(&mut buffer).await?;
+            if let packet::Packet::Ack = packet::Packet::parse(&buffer) {
+                tracing::trace!("receive ack from client");
+                let mut state = state.write().await;
+                let cc = ControlChannel::new(conn, domain_port, Arc::clone(&domains));
+                state.insert(domain, cc);
+            }
         }
         packet::Packet::DataInit(domain) => {
-            unimplemented!()
+            let state = state.write().await;
+
+            if let Some(cc) = state.get(&domain) {
+                let _ = cc.data_tx.send(conn).await;
+            }
+        }
+        _ => {
+            println!("unexpected packet: {packet:?}");
         }
     }
+    buffer.advance(bytes_len);
+
     Ok(())
 }
 
-struct  ControlChannel {
+struct ControlChannel {
     data_tx: mpsc::Sender<TcpStream>,
 }
 
@@ -95,8 +129,8 @@ impl ControlChannel {
         let (tx, mut rx): (_, mpsc::Receiver<TcpStream>) = mpsc::channel(32);
         let (close_tx, mut close_rx) = tokio::sync::oneshot::channel();
 
-        // Push domain back to domain pools when client connection closed
-        // The client is expected to a Heartbeat every 500ms
+        // Push domain back to domain pools when a client connection is closed.
+        // The client is expected to send a Heartbeat every 500 ms.
         let domains = Arc::clone(&domains);
         let dp = domain_port.clone();
         tokio::spawn(async move {
@@ -115,7 +149,6 @@ impl ControlChannel {
                 }
             }
         });
-
         ControlChannel { data_tx: tx }
     }
 }
