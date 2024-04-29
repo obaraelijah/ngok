@@ -1,8 +1,9 @@
 use bytes::{Buf, BytesMut};
 use clap::Parser;
+use std::error::Error;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use std::error::Error;
 
 mod packet;
 
@@ -23,11 +24,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::trace!("Init client with {:?}", config);
 
     let domain = init(&config).await?;
+    if let Err(e) = run_data_channel(&config, domain).await {
+        tracing::error!("{:?}", e);
+    }
+    
     Ok(())
 }
 
 async fn init(config: &Config) -> Result<String, Box<dyn Error + Send + Sync>> {
-    let cc = TcpStream::connect(format!("{}:{}", config.domain_name, config.server_port)).await?;
+    let mut cc =
+        TcpStream::connect(format!("{}:{}", config.domain_name, config.server_port)).await?;
     let mut buf = BytesMut::with_capacity(1024);
 
     // Send a Init
@@ -45,6 +51,28 @@ async fn init(config: &Config) -> Result<String, Box<dyn Error + Send + Sync>> {
     if domain.is_none() {
         return Err("fail to init with server".into());
     }
-    
-    Ok(())
+
+    // Let tunnel know client is ready
+    cc.write_all(&bincode::serialize(&packet::Packet::Ack).unwrap())
+        .await?;
+
+    tracing::trace!("control channel established!");
+
+    // send heartbeat to server every 500ms
+    tokio::spawn(async move {
+        loop {
+            let res = cc.write_all(&[1u8; 1]).await;
+            if let Err(err) = res {
+                tracing::error!("control channel is closed by remote peer {}", err);
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
+    domain.ok_or_else(|| "no domain return".into())
+}
+
+async fn run_data_channel(config: &Config, domain: String) -> std::io::Result<()> {
+    unimplemented!()
 }
