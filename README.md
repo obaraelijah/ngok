@@ -47,6 +47,59 @@ By default, the server start at port 3001.
 Apr 30 09:58:49.694  INFO server: Listening on TCP: 0.0.0.0:3001
 ```
 
+You could customize it by passing it into `--port`.
+
+#### Running the client
+
+The client, on the other hand, only required the `--domain-name` to be passed in, which is the
+domain/IP for your `ngok` server above:
+
+```bash
+# Since we are running our server locally, we can just pass in 127.0.0.1
+cargo run --bin client -- --domain-name 127.0.0.1
+```
+
+Similarly, by default, it assumed the `ngok` server is start at port 3001 and can be customize
+by passing the value at `--port`. You shall see the following output once it start successfully:
+
+```
+tunnel up!
+Host: c.domain.com
+```
+
+On the `ngok` server side, you will see the following logs:
+
+```
+Apr 30 09:59:55.722  INFO server: Accepting new client...
+Apr 30 09:59:55.723  INFO server: Accepting new client...
+Apr 30 09:59:55.723  INFO server: Listening to 0.0.0.0:3004
+Apr 30 10:02:08.773  INFO server: Accept incoming from visitor_rx
+```
+This mean that the `ngok` server has spin up another server at port 3004 to proxy the requests for the above `client`.
+
+#### Running a web server
+
+The last piece of it is a working webserver running locally at port 4000. _(Yes, it is currently
+hardcoded at port 4000...)_.
+
+### Playing around with it
+
+Once you have the above servers running, you can now `curl` the provided domain on the client
+output and see your requests going through the proxy:
+
+```
+# The reason we are hitting port 3004, is because the `ngok` server
+# spin up the proxy server at port 3004.
+curl http://c.domain.com:3004
+```
+
+You'll now see the `ngok` client show some information about
+the request we just send:
+
+```
+GET /                7.973482ms      200 OK
+```
+
 ### Implementation and limitations
 
 Currently, it's a half baked implementation. It basically:
