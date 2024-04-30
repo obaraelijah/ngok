@@ -236,5 +236,31 @@ impl<T: AsyncRead + AsyncWrite> AsyncRead for Logger<T> {
 }
 
 impl<T: AsyncWrite + AsyncRead> AsyncWrite for Logger<T> {
-    unimplemented!();
+    fn poll_write(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+        self.inner.as_mut().poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[std::io::IoSlice<'_>],
+        ) -> Poll<std::io::Result<usize>> {
+        self.inner.as_mut().poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        self.inner.as_mut().poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        self.inner.as_mut().poll_shutdown(cx)
+    }
 }
