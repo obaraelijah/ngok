@@ -1,3 +1,52 @@
+## Ngok
+
+A minimal `ngrok` implementation in Rust, for educational purpose.
+This work is largely based on [rathole][0], especially [the very first commit][1].
+_This is by no mean an idiomatic or correct Rust implementation. I am mastering
+Rust and fairly new to writing networking code with `tokio`_.
+
+## Quick Start
+
+There are two components in `ngok`:
+
+- `src/server.rs`: the server consists of two part, the control server and the proxy server.
+  - The control server take in request from the clients, assign domain name and setup proxy server
+  for each clients.
+  - The proxy server will receive requests through the provided domain name and proxy it to the client.
+running locally in the user machine.
+- `src/client.rs`: the client receive the requests from the internet through the server,
+and further proxy it to the web server running locally by the user.
+
+### Setting Up
+
+So in order to see this code in action, you'll have to run 3 service:
+
+#### Running the server
+
+The `server` binary expect the `domains` to be provided. These are the domains that
+users from the internet will send requests to. Since we are running locally, we could
+mock those domains and have it work locally by manually editing our hosts file at
+`/etc/hosts`. Hence, this would only work in your local machine
+
+```
+# /etc/hosts
+
+127.0.0.1 a.domain.com
+127.0.0.1 b.domain.com
+127.0.0.1 c.domain.com
+```
+Then, we can pass these to the `server` and run it:
+
+```bash
+RUST_LOG=info cargo run --bin server -- --domains a.domain.com --domains b.domain.com --domains c.domain.com
+```
+
+By default, the server start at port 3001.
+
+```
+Apr 30 09:58:49.694  INFO server: Listening on TCP: 0.0.0.0:3001
+```
+
 ### Implementation and limitations
 
 Currently, it's a half baked implementation. It basically:
