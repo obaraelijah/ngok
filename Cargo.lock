@@ -326,6 +326,7 @@ dependencies = [
 name = "ngok"
 version = "0.1.0"
 dependencies = [
+ "ansi_term",
  "bincode",
  "bytes",
  "clap",
