@@ -330,6 +330,7 @@ dependencies = [
  "bincode",
  "bytes",
  "clap",
+ "regex",
  "serde",
  "tokio",
  "tracing",
