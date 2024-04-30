@@ -110,7 +110,7 @@ async fn run_data_channel(config: &Config, domain: String) -> std::io::Result<()
                 state: state.clone(),
             };
 
-            let _ = tokio::io::copy_bidirectional(&mut logger_src, &mut logger_dest);
+            let _ = tokio::io::copy_bidirectional(&mut logger_src, &mut logger_dest).await;
         }
     }
 }
@@ -171,7 +171,7 @@ impl<T: AsyncRead + AsyncWrite> AsyncRead for Logger<T> {
                                 return poll_result;
                             };
 
-                            let Ok(status_code) = status_code.parse() else  {
+                            let Ok(status_code) = status_code.parse() else {
                                 return poll_result;
                             };
 
@@ -237,18 +237,18 @@ impl<T: AsyncRead + AsyncWrite> AsyncRead for Logger<T> {
 
 impl<T: AsyncWrite + AsyncRead> AsyncWrite for Logger<T> {
     fn poll_write(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &[u8],
-        ) -> Poll<std::io::Result<usize>> {
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
         self.inner.as_mut().poll_write(cx, buf)
     }
 
     fn poll_write_vectored(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            bufs: &[std::io::IoSlice<'_>],
-        ) -> Poll<std::io::Result<usize>> {
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> Poll<std::io::Result<usize>> {
         self.inner.as_mut().poll_write_vectored(cx, bufs)
     }
 
